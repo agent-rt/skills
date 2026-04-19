@@ -73,16 +73,68 @@ Schema design tips:
   can find them semantically.
 - Use `required: true` and `default: <value>` on fields you want the
   server to validate or fill (e.g., `required` on `amount`, `default:
-  "JPY"` on `currency`).
+  "JPY"` on `currency`). Defaults fill missing values on create —
+  agents skip writing them.
+- Use `value_type: "date"` for dates; Synap validates ISO 8601 on write
+  and you can pass `default: "now"` to auto-stamp on create.
 - Use `types` (plural) if one app holds different shapes ("task" +
   "note" in one `workspace` app). Inside each type, set `type: "..."`
   on create ops.
 - Don't over-design v1 — EAV lets you add fields later.
 
+**Ask the server to echo the persisted row**: pass `returning: true` (or
+`returning: [field, ...]`) on a `create`/`update` op. Saves a follow-up
+`query` when defaults filled in or you need to show the user what got
+stored. Use sparingly — if you already know every field you wrote,
+don't ask for it back.
+
+```json
+{"op": "create", "data": {"amount": 1200}, "returning": true}
+// → {"entity_ids":["abc"], "entities":[{"entity_id":"abc","amount":1200,"currency":"JPY"}]}
+```
+
 ### "Show me my todos / last week's notes / …"
 
 `query` with filters and sort. TSV output is dense — parse it, don't dump
 it back to the user raw.
+
+**Cross-field OR / NOT**: `filters` elements can be leaves **or** bool
+nodes. Top level is an implicit AND; any element may be `{or: [...]}`,
+`{and: [...]}`, or `{not: node}`. Use this before reaching for two
+queries + client-side merge.
+
+```json
+"filters": [
+  {"or": [
+    {"field": "priority", "op": "eq",  "value": "high"},
+    {"field": "due",      "op": "lte", "value": "2026-04-21"}
+  ]},
+  {"field": "status", "op": "in", "value": ["todo", "doing"]}
+]
+```
+
+Ref ops (`ref_to` / `ref_from` / `orphan`) must stay as top-level leaves
+— they resolve via entity-id lookup and can't nest inside bool nodes.
+
+### "How much did I spend on X / how many tasks are done / …" (aggregation)
+
+Don't materialize rows and sum client-side. Pass `aggregate` on `query`:
+
+```json
+{"app": "ledger", "type": "expense",
+ "filters": [{"field": "occurred_at", "op": "between",
+              "value": ["2026-04-01", "2026-04-30"]}],
+ "aggregate": [{"fn": "sum", "field": "amount", "as": "total"}],
+ "group_by": "category"}
+// TSV: key  total
+//      food    48200
+//      transport 9400
+```
+
+Functions: `sum`, `avg`, `min`, `max`, `count` (count needs no `field`).
+`group_by` partitions the rows; omit it for a single aggregate row.
+`filters` (including bool nodes) runs before aggregation. **This is a
+10-100× token save over materialize-then-sum** for apps with many rows.
 
 ### "Find anything about X"
 
@@ -118,6 +170,19 @@ folded tool output.
 - **Don't ignore the subject field.** Memory is scoped by `subject`
   (defaults to `"user"`). If the user is tracking someone else ("remember
   Alice prefers tea"), pass `subject: "alice"`.
+- **Don't `returning: true` reflexively.** Ask for the row back only when
+  the server filled defaults you need to show the user, or after a
+  partial `update`. On a plain create where you already wrote every
+  field, the returned row is redundant bytes.
+- **Don't materialize rows to sum them.** If the user asks "how much /
+  how many / what's the average", use `aggregate`. Pulling 1000 rows to
+  add their `amount` column is 100× more tokens for no benefit.
+- **Don't split a bool query into two queries.** If the user says "tasks
+  tagged rust OR go", use one query with `{or: [...]}`, not two queries
+  + client-side merge (snippets don't combine).
+- **Don't stringify dates.** Use `value_type: "date"` so writes with
+  `"yesterday"` or `"2026-13-40"` get rejected at the boundary, not
+  silently stored.
 
 ## Common patterns
 
@@ -131,11 +196,14 @@ User: "I want to start tracking my reading."
    - title (string, required: true)
    - author (string)
    - status (enum: to_read | reading | done, default: "to_read")
-   - started_at, finished_at (string — ISO 8601)
+   - started_at, finished_at (date)
    - notes (string, vectorized: true)
    - rating (number)
 3. "Ready — tell me what you're reading and I'll add it."
 ```
+
+`date` fields validate ISO 8601 on write — `started_at: "sometime
+last spring"` gets rejected rather than silently stored.
 
 ### Surfacing context at the start of a conversation
 
@@ -162,8 +230,10 @@ field → clear old. EAV cost is minimal.
 | Create a data app | `init_app` | `fields:[...]` single-type, `types:{...}` multi-type |
 | List apps | `list_apps` | `include_internal: true` to see `synap.*` |
 | Add/update entities | `write` | ops array, N = atomic batch |
-| Filter entities | `query` | TSV output; project with `select:[...]` |
+| Filter entities | `query` | TSV; project with `select:[...]`; bool filters via `{and/or/not}` |
+| Aggregate over entities | `query` + `aggregate:[{fn,field,as}]` | sum/avg/min/max/count + optional `group_by` |
 | Semantic find | `search` | rank: relevance \| recency \| time_decay |
+| Echo persisted row | `write` op + `returning` | `true` for full, `[fields]` for projection |
 | Read a file | `read_file` | pages automatically |
 | Recover compacted turns | `expand_context` | pass turn_ids from the compressed block |
 | Detect links between entities | `detect_links` | opt-in, for knowledge graphs |
