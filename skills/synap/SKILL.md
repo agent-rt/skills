@@ -121,6 +121,29 @@ entities that never wrote the attribute; `is_not_null` is the inverse.
 Under EAV "no row" *is* null — no `value` field needed. Useful for
 "tasks without a due date" or "entries not yet archived".
 
+### "List tasks with assignee names" (follow ref fields)
+
+`ref` fields store only the target `entity_id`. If you also need fields
+from the referent, set `expand_refs: N` so the server follows the
+pointer for you in the same call. Pair it with dot-path `select` to
+project only what you need — `select: ["title", "assignee.name"]` is
+dramatically cheaper than pulling every attribute of every referent.
+
+```json
+{"app": "tasks",
+ "expand_refs": 1,
+ "select": ["title", "assignee.name"]}
+// → each row's `assignee` becomes an array with just the `name` field.
+```
+
+Rules:
+- `expand_refs` is capped at 10 (any higher errors out). 1–2 covers
+  almost everything real agents want.
+- A dot-path `select` entry whose depth exceeds `expand_refs` errors
+  out up front — set both or neither.
+- Skip `expand_refs` if you only need the ids: a follow-up `query`
+  keyed by those ids is cheaper when you already filtered to one row.
+
 ### "How much did I spend on X / how many tasks are done / …" (aggregation)
 
 Don't materialize rows and sum client-side. Pass `aggregate` on `query`:
