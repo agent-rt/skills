@@ -80,6 +80,16 @@ Schema design tips:
 - Use `types` (plural) if one app holds different shapes ("task" +
   "note" in one `workspace` app). Inside each type, set `type: "..."`
   on create ops.
+- **One app per domain, types for entity shapes.** If a domain has
+  multiple entity shapes (knowledge brain with pages / links /
+  events; wiki with sources / summaries / logs), keep it in ONE app
+  with `types: {...}`. **Do NOT** create sibling apps like
+  `brain.pages` + `brain.links` + `brain.events` — you'll lose
+  atomic cross-type writes, cross-type `aggregate` / filter /
+  search, and burden yourself with three namespaces to coordinate.
+  Multiple apps only when the domains are genuinely independent
+  (personal `brain` vs team `wiki`). The sibling-apps shape is the
+  anti-pattern the multi-type feature was built to kill.
 - Don't over-design v1 — EAV lets you add fields later.
 
 **Ask the server to echo the persisted row**: pass `returning: true` (or
@@ -188,6 +198,12 @@ folded tool output.
 
 ## Anti-patterns
 
+- **Don't split one domain across sibling apps.** If you find yourself
+  naming apps `foo.pages` + `foo.links` + `foo.events`, stop — that's
+  table-per-shape thinking. Collapse into one `foo` app with
+  `types: {page: [...], link: [...], event: [...]}`. You'll regain
+  atomic cross-type writes and cross-type `query` / `search` /
+  `aggregate`. Multi-app only for genuinely independent domains.
 - **Don't write to `synap.*` apps.** Synap rejects it. Use `remember` /
   `forget` for memory.
 - **Don't reinvent memory with a custom app.** `synap.memories` has
