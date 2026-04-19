@@ -116,6 +116,11 @@ queries + client-side merge.
 Ref ops (`ref_to` / `ref_from` / `orphan`) must stay as top-level leaves
 — they resolve via entity-id lookup and can't nest inside bool nodes.
 
+**Missing-field filters**: `{"field": "due", "op": "is_null"}` matches
+entities that never wrote the attribute; `is_not_null` is the inverse.
+Under EAV "no row" *is* null — no `value` field needed. Useful for
+"tasks without a due date" or "entries not yet archived".
+
 ### "How much did I spend on X / how many tasks are done / …" (aggregation)
 
 Don't materialize rows and sum client-side. Pass `aggregate` on `query`:
