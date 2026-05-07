@@ -74,6 +74,25 @@ jj git push --all
 
 **`private-commits` 防呆**：配置中 `git.private-commits = "description(glob:'wip:*') | ..."` 会阻止匹配的 commit 被 push，相当于"留个 wip:" 就不会被推出去。
 
+**push 后 `@` 会自动变成新的空 change**：被推送的 commit 进入 immutable 状态（受 `revset-aliases.immutable_heads` 保护），jj 不让你原地继续编辑覆盖已发布的 commit，所以替你建一个新的空 change 让工作目录保持可写。这是预期行为，**不要 `jj abandon` 这个空 change**——继续在它上面工作即可。如果要给上一个 commit 补改动，用 `jj squash` 把新 change 合进去（但已 push 的 commit 改了之后下一次 push 会变 force-push，团队仓库慎用）。
+
+## Bookmark 不跟随 `@`（最容易踩的坑）
+
+git 用户的肌肉记忆是"`commit` 自动推进当前分支"。jj **不会**。每次想 push 之前都要确认 bookmark 在哪：
+
+```bash
+# 看所有 bookmark 当前指向哪
+jj bookmark list
+
+# 把 main 推进到当前 @
+jj bookmark move main --to @
+
+# 把最近一个 bookmark 拽到 @-（典型 alias: jj tug）
+jj bookmark move --from 'closest_bookmark(@-)' --to @-
+```
+
+`jj git push -c @` 是个例外——它会**自动建一个新 bookmark**指向 `@`（命名走 `templates.git_push_bookmark`），适合 PR 工作流。但向已存在的 bookmark（如 main）推进只能手动 move。
+
 ## Conflict resolution
 
 jj 的冲突是**一等公民**——它会保存到 commit 里，不阻塞操作。`jj log` 会标 `conflict`。解决：
