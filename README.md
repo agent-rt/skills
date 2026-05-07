@@ -40,6 +40,7 @@ brew install skillctl
 skillctl add github:agent-rt/skills/skills/release-flow --as agent-rt/release-flow
 skillctl add github:agent-rt/skills/skills/rust-review  --as official/rust-review
 skillctl add github:agent-rt/skills/skills/skillctl-self --as local/skillctl-self
+skillctl add github:agent-rt/skills/skills/jj           --as official/jj
 ```
 
 Then apply a profile to start a project pre-loaded with these skills:
@@ -59,6 +60,7 @@ skills/         agentskills.io-compatible SKILL.md folders
   rust-review/      Idiomatic Rust review checklist
   skillctl-self/    Conventions for working ON skillctl itself
   release-flow/     Agent-RT release pipeline + family conventions
+  jj/               Jujutsu (jj) VCS workflow: colocated, squash/split/absorb, bookmark push
 profiles/       skillctl-only profiles (TOML)
   rust-cli.toml         Rust CLI starter (core: rust-review)
   skillctl-dev.toml     For developing skillctl itself
